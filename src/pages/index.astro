@@ -62,8 +62,8 @@ const base = import.meta.env.BASE_URL;
 
   <div class="mt-10 space-y-4" id="stats"></div>
   <script type="application/json" id="data-json">{JSON.stringify(characters)}</script>
-  <script>
-    const BASE = ${JSON.stringify(base)};
+  <script is:inline>
+    const BASE = import.meta.env.BASE_URL;
     const $ = (s, r=document) => r.querySelector(s);
     const $$ = (s, r=document) => Array.from(r.querySelectorAll(s));
 

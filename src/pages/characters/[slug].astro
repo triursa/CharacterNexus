@@ -1,13 +1,14 @@
 ---
 import BaseLayout from '../../layouts/BaseLayout.astro';
-import { getEntry } from 'astro:content';
+import { getCollection } from 'astro:content';
+
+export async function getStaticPaths() {
+  const entries = await getCollection('characters');
+  return entries.map(e => ({ params: { slug: e.slug }, props: { data: e.data } }));
+}
 
 const { slug } = Astro.params;
-const entry = await getEntry('characters', slug);
-if (!entry) {
-  throw new Error('Character not found');
-}
-const data = entry.data;
+const { data } = Astro.props;
 const base = import.meta.env.BASE_URL;
 ---
 <BaseLayout title={data.name || slug}>
@@ -36,8 +37,8 @@ const base = import.meta.env.BASE_URL;
       <slot />
     </div>
   </article>
-  <script>
-    const BASE = ${JSON.stringify(base)};
+  <script is:inline>
+    const BASE = import.meta.env.BASE_URL;
     async function downloadPng(fileBase) {
       const url = `${BASE}images/${fileBase}.webp`;
       const blob = await fetch(url).then(r => r.blob());
@@ -55,7 +56,9 @@ const base = import.meta.env.BASE_URL;
         a.remove();
       }, 'image/png');
     }
-    const btn = document.getElementById('dl-png');
-    btn?.addEventListener('click', () => downloadPng(btn.dataset.base));
+    document.getElementById('dl-png')?.addEventListener('click', (e) => {
+      const btn = e.currentTarget;
+      downloadPng(btn.getAttribute('data-base'));
+    });
   </script>
 </BaseLayout>
