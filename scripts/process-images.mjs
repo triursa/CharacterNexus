@@ -21,7 +21,16 @@ function toSnakeCase(base) {
 async function ensureDir(p) { await fs.mkdir(p, { recursive: true }); }
 
 async function listFiles(dir) {
-  const entries = await fs.readdir(dir, { withFileTypes: true });
+  let entries = [];
+  try {
+    entries = await fs.readdir(dir, { withFileTypes: true });
+  } catch (e) {
+    if (e && e.code === 'ENOENT') {
+      // Directory doesn't exist; treat as empty set.
+      return [];
+    }
+    throw e;
+  }
   const files = [];
   for (const e of entries) {
     const p = path.join(dir, e.name);
@@ -49,6 +58,10 @@ async function convertAll() {
   await ensureDir(contentDir);
 
   const all = await listFiles(rawDir);
+  if (all.length === 0) {
+    console.log('No raw images found ("Raw Images" missing or empty). Skipping conversion.');
+    return;
+  }
   const images = all.filter(p => allowedExt.has(path.extname(p).toLowerCase()));
   const seen = new Set();
 
