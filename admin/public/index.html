@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <title>Character Nexus Admin</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 0; background:#0b0d12; color:#eee; }
+    header { padding:1rem 1.5rem; border-bottom:1px solid #222; display:flex; justify-content:space-between; align-items:center; }
+    h1 { font-size:1.1rem; margin:0; }
+    main { padding:1rem 1.5rem; }
+    table { width:100%; border-collapse:collapse; font-size:.85rem; }
+    th, td { padding:.4rem .5rem; border-bottom:1px solid #1e2530; vertical-align:top; }
+    th { text-align:left; background:#101822; position:sticky; top:0; z-index:1; }
+    tr:hover { background:#141d29; }
+    input[type=text] { width:100%; background:#14202c; color:#eee; border:1px solid #263445; border-radius:4px; padding:.3rem .4rem; font-size:.8rem; }
+    input[type=text]:focus { outline:1px solid #3b82f6; border-color:#3b82f6; }
+    .img-thumb { width:56px; height:56px; object-fit:cover; border:1px solid #263445; border-radius:4px; background:#111; }
+    .actions { display:flex; gap:.4rem; }
+    button { cursor:pointer; background:#1f2d3a; border:1px solid #2f3f52; color:#fff; padding:.35rem .6rem; font-size:.7rem; border-radius:4px; }
+    button:hover { background:#2a3a4a; }
+    button.save { background:#2563eb; border-color:#2563eb; }
+    button.save:hover { background:#1d4ed8; }
+    button.rename { background:#7c3aed; border-color:#7c3aed; }
+    button.rename:hover { background:#6d28d9; }
+    .status { font-size:.7rem; margin-left:.5rem; }
+    footer { padding:1rem 1.5rem; text-align:center; color:#666; font-size:.65rem; }
+    .toolbar { display:flex; gap:.75rem; flex-wrap:wrap; margin-bottom:1rem; }
+    .toolbar input { max-width:240px; }
+    .pill { background:#1f2d3a; padding:.2rem .5rem; border-radius:999px; font-size:.6rem; margin:0 .25rem .25rem 0; display:inline-block; border:1px solid #2f3f52; }
+  </style>
+</head>
+<body>
+<header>
+  <h1>Character Nexus Admin</h1>
+  <div id="summary"></div>
+</header>
+<main>
+  <div class="toolbar">
+    <input type="text" id="filter" placeholder="Filter (name, race, base)" />
+    <button id="refresh">Refresh</button>
+  </div>
+  <div style="overflow:auto; max-height:70vh;">
+    <table id="table">
+      <thead>
+        <tr>
+          <th>Img</th>
+          <th>Base</th>
+          <th>Name</th>
+          <th>Race</th>
+          <th>Subrace</th>
+          <th>Tags</th>
+          <th>Projects</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
+</main>
+<footer>Local admin tool only. Changes write directly to repository files.</footer>
+<script>
+async function fetchCharacters(){
+  const res = await fetch('/api/characters');
+  return (await res.json()).items;
+}
+
+function el(tag, props={}, children=[]) {
+  const e = document.createElement(tag);
+  Object.assign(e, props);
+  children.forEach(c => e.append(c));
+  return e;
+}
+
+let all = [];
+const tbody = document.querySelector('#table tbody');
+const filterInput = document.getElementById('filter');
+const summary = document.getElementById('summary');
+const refreshBtn = document.getElementById('refresh');
+
+function matchesFilter(item, q){
+  if(!q) return true;
+  q = q.toLowerCase();
+  return [item.name, item.race, item.subrace, item.base, item.imageFileBase].some(v => (v||'').toLowerCase().includes(q));
+}
+
+function render(){
+  const q = filterInput.value.trim();
+  tbody.innerHTML='';
+  const filtered = all.filter(c => matchesFilter(c, q));
+  filtered.forEach(item => {
+    const tr = document.createElement('tr');
+
+    const imgTd = document.createElement('td');
+    const img = document.createElement('img');
+    img.src = item.imageUrl; img.alt = item.name || item.imageFileBase; img.className='img-thumb';
+    imgTd.append(img);
+
+    const baseInput = el('input',{type:'text', value:item.imageFileBase});
+    const nameInput = el('input',{type:'text', value:item.name});
+    const raceInput = el('input',{type:'text', value:item.race});
+    const subraceInput = el('input',{type:'text', value:item.subrace});
+
+    const tagsDiv = el('div');
+    item.tags.forEach(t => tagsDiv.append(el('span',{className:'pill', innerText:t})));
+    const projectsDiv = el('div');
+    item.projects.forEach(p => projectsDiv.append(el('span',{className:'pill', innerText:p})));
+
+    const statusSpan = el('span',{className:'status'});
+
+    const saveBtn = el('button',{innerText:'Save', className:'save'});
+    saveBtn.addEventListener('click', async () => {
+      saveBtn.disabled = true;
+      statusSpan.textContent = 'Saving...';
+      const payload = {
+        originalBase: item.base,
+        newBase: baseInput.value.trim(),
+        name: nameInput.value.trim(),
+        race: raceInput.value.trim(),
+        subrace: subraceInput.value.trim()
+      };
+      try {
+        const resp = await fetch('/api/characters/update', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload)});
+        const data = await resp.json();
+        if (!resp.ok) throw new Error(data.error || 'Update failed');
+        statusSpan.textContent = 'Saved';
+        await load();
+      } catch(e){
+        statusSpan.textContent = 'Error: ' + e.message;
+      } finally {
+        saveBtn.disabled = false;
+        setTimeout(()=> statusSpan.textContent='', 3000);
+      }
+    });
+
+    const actionsTd = document.createElement('td');
+    actionsTd.append(saveBtn, statusSpan);
+
+    tr.append(
+      imgTd,
+      el('td',{},[baseInput]),
+      el('td',{},[nameInput]),
+      el('td',{},[raceInput]),
+      el('td',{},[subraceInput]),
+      el('td',{},[tagsDiv]),
+      el('td',{},[projectsDiv]),
+      actionsTd
+    );
+    tbody.append(tr);
+  });
+  summary.textContent = `${filtered.length} / ${all.length} characters`;  
+}
+
+filterInput.addEventListener('input', render);
+refreshBtn.addEventListener('click', load);
+
+async function load(){
+  all = await fetchCharacters();
+  render();
+}
+
+load();
+</script>
+</body>
+</html>

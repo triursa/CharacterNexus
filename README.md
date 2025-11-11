@@ -85,6 +85,20 @@ npm run build
 
 Open the dev server URL shown in your terminal. The homepage lists characters with search and tag/project filters. Click a card for details and download options.
 
+## Admin GUI (local)
+
+To edit character names, race, and subrace and to rename image basenames directly in the repository, run the local admin:
+
+```powershell
+npm run admin
+```
+
+Then open <http://localhost:5174> in your browser. You can:
+
+- Edit Name, Race, Subrace.
+- Change the image base name (snake_case recommended). On save, both the image file in `public/images/` and the markdown file in `src/content/characters/` are updated. Collisions are handled by appending `-1`, `-2`, etc.
+- Changes are written immediately to files; review with `git status` and commit when ready.
+
 ## GitHub Pages setup
 
 The site is deployed automatically on push to `main` via `.github/workflows/deploy.yml`.

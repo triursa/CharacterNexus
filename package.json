@@ -9,12 +9,14 @@
     "preview": "astro preview",
     "process:images": "node scripts/process-images.mjs",
     "shorten:names": "node scripts/shorten-names.mjs",
-    "validate": "node scripts/validate-content.mjs"
+    "validate": "node scripts/validate-content.mjs",
+    "admin": "node admin/server.mjs"
   },
   "dependencies": {
     "astro": "^4.10.0",
     "sharp": "^0.33.0",
-    "gray-matter": "^4.0.3"
+    "gray-matter": "^4.0.3",
+    "express": "^4.19.2"
   },
   "devDependencies": {
     "@astrojs/tailwind": "^5.1.0",
