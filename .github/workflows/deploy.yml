@@ -33,6 +33,9 @@ jobs:
       - name: Process images and generate stubs
         run: npm run process:images
 
+      - name: Shorten long basenames
+        run: npm run shorten:names
+
       - name: Commit processed assets [skip ci]
         run: |
           git config user.name "github-actions[bot]"
@@ -42,6 +45,9 @@ jobs:
             git commit -m "[skip ci] chore: process images and stubs"
             git push
           fi
+
+      - name: Validate content
+        run: npm run validate
 
       - name: Build
         run: npm run build
