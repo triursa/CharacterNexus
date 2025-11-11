@@ -65,6 +65,11 @@ async function fetchCharacters(){
   return (await res.json()).items;
 }
 
+async function fetchRaces(){
+  const res = await fetch('/api/meta/races');
+  return (await res.json()).races || {};
+}
+
 function el(tag, props={}, children=[]) {
   const e = document.createElement(tag);
   Object.assign(e, props);
@@ -73,6 +78,7 @@ function el(tag, props={}, children=[]) {
 }
 
 let all = [];
+let RACES = {};
 const tbody = document.querySelector('#table tbody');
 const filterInput = document.getElementById('filter');
 const summary = document.getElementById('summary');
@@ -82,6 +88,21 @@ function matchesFilter(item, q){
   if(!q) return true;
   q = q.toLowerCase();
   return [item.name, item.race, item.subrace, item.base, item.imageFileBase].some(v => (v||'').toLowerCase().includes(q));
+}
+
+function toSnakeCase(str){
+  return (str||'')
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g,'')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g,'_')
+    .replace(/^_+|_+$/g,'')
+    .replace(/_+/g,'_');
+}
+
+function snakeToTitle(s){
+  if (!s) return '';
+  return s.split('_').map(w => w.charAt(0).toUpperCase()+w.slice(1)).join(' ');
 }
 
 function render(){
@@ -96,10 +117,55 @@ function render(){
     img.src = item.imageUrl; img.alt = item.name || item.imageFileBase; img.className='img-thumb';
     imgTd.append(img);
 
-    const baseInput = el('input',{type:'text', value:item.imageFileBase});
+    const baseInput = el('input',{type:'text', value:item.imageFileBase, readOnly:true, title:'Computed from race, subrace, and name'});
     const nameInput = el('input',{type:'text', value:item.name});
-    const raceInput = el('input',{type:'text', value:item.race});
-    const subraceInput = el('input',{type:'text', value:item.subrace});
+
+    const raceSelect = document.createElement('select');
+    const emptyRace = el('option',{value:'', innerText:'(none)'});
+    raceSelect.append(emptyRace);
+    Object.keys(RACES).sort().forEach(r => {
+      raceSelect.append(el('option',{value:r, innerText: snakeToTitle(r)}));
+    });
+    const currentRaceSnake = toSnakeCase(item.race);
+    if (item.race && !Object.keys(RACES).includes(currentRaceSnake)) {
+      raceSelect.append(el('option',{value:item.race, innerText: `${item.race} (custom)`}));
+      raceSelect.value = item.race;
+    } else {
+      raceSelect.value = currentRaceSnake;
+    }
+
+    const subraceSelect = document.createElement('select');
+    function syncSubraceOptions(){
+      const r = raceSelect.value;
+      subraceSelect.innerHTML = '';
+      subraceSelect.append(el('option',{value:'', innerText:'(none)'}));
+      if (r && Array.isArray(RACES[r])){
+        RACES[r].forEach(sr => subraceSelect.append(el('option',{value:sr, innerText: snakeToTitle(sr)})));
+      }
+      // preserve selection if possible, including custom
+      const normalizedSub = toSnakeCase(item.subrace);
+      if (r && RACES[r] && RACES[r].includes(normalizedSub)) {
+        subraceSelect.value = normalizedSub;
+      } else if (item.subrace) {
+        subraceSelect.append(el('option',{value:item.subrace, innerText: `${item.subrace} (custom)`}));
+        subraceSelect.value = item.subrace;
+      } else {
+        subraceSelect.value = '';
+      }
+    }
+    syncSubraceOptions();
+
+    function recomputeBase(){
+      const parts = [raceSelect.value, subraceSelect.value, toSnakeCase(nameInput.value)].filter(Boolean);
+      const computed = parts.join('_');
+      baseInput.value = computed || item.imageFileBase;
+    }
+
+    raceSelect.addEventListener('change', ()=>{ syncSubraceOptions(); recomputeBase(); });
+    subraceSelect.addEventListener('change', recomputeBase);
+    nameInput.addEventListener('input', recomputeBase);
+    // initial compute
+    recomputeBase();
 
     const tagsDiv = el('div');
     item.tags.forEach(t => tagsDiv.append(el('span',{className:'pill', innerText:t})));
@@ -114,10 +180,9 @@ function render(){
       statusSpan.textContent = 'Saving...';
       const payload = {
         originalBase: item.base,
-        newBase: baseInput.value.trim(),
         name: nameInput.value.trim(),
-        race: raceInput.value.trim(),
-        subrace: subraceInput.value.trim()
+        race: raceSelect.value,
+        subrace: subraceSelect.value
       };
       try {
         const resp = await fetch('/api/characters/update', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload)});
@@ -133,15 +198,34 @@ function render(){
       }
     });
 
+    const deleteBtn = el('button',{innerText:'Delete'});
+    deleteBtn.addEventListener('click', async () => {
+      if (!confirm('Delete this character and its image? This cannot be undone.')) return;
+      deleteBtn.disabled = true;
+      statusSpan.textContent = 'Deleting...';
+      try {
+        const resp = await fetch('/api/characters/delete', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ base: baseInput.value.trim() || item.base })});
+        const data = await resp.json();
+        if (!resp.ok) throw new Error(data.error || 'Delete failed');
+        statusSpan.textContent = 'Deleted';
+        await load();
+      } catch (e){
+        statusSpan.textContent = 'Error: ' + e.message;
+      } finally {
+        deleteBtn.disabled = false;
+        setTimeout(()=> statusSpan.textContent='', 3000);
+      }
+    });
+
     const actionsTd = document.createElement('td');
-    actionsTd.append(saveBtn, statusSpan);
+    actionsTd.append(saveBtn, deleteBtn, statusSpan);
 
     tr.append(
       imgTd,
       el('td',{},[baseInput]),
       el('td',{},[nameInput]),
-      el('td',{},[raceInput]),
-      el('td',{},[subraceInput]),
+      el('td',{},[raceSelect]),
+      el('td',{},[subraceSelect]),
       el('td',{},[tagsDiv]),
       el('td',{},[projectsDiv]),
       actionsTd
@@ -155,6 +239,9 @@ filterInput.addEventListener('input', render);
 refreshBtn.addEventListener('click', load);
 
 async function load(){
+  if (!Object.keys(RACES).length) {
+    RACES = await fetchRaces();
+  }
   all = await fetchCharacters();
   render();
 }

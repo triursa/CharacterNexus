@@ -15,6 +15,43 @@ const imagesDir = path.join(repoRoot, 'public', 'images');
 app.use('/images', express.static(imagesDir, { fallthrough: true }));
 app.use('/', express.static(path.join(repoRoot, 'admin', 'public')));
 
+// Canonical list of D&D races and subraces (simplified)
+const RACES = {
+  dragonborn: [],
+  dwarf: ['hill', 'mountain'],
+  elf: ['high', 'wood', 'drow', 'eladrin'],
+  gnome: ['forest', 'rock'],
+  halfling: ['lightfoot', 'stout'],
+  human: [],
+  tiefling: [],
+  half_orc: [],
+  half_elf: [],
+  aasimar: ['protector', 'scourge', 'fallen'],
+  genasi: ['air', 'earth', 'fire', 'water'],
+  goliath: [],
+  tabaxi: [],
+  firbolg: [],
+  kenku: [],
+  tortle: [],
+  yuan_ti: [],
+  triton: [],
+  goblin: [],
+  hobgoblin: [],
+  bugbear: [],
+  kobold: [],
+  lizardfolk: [],
+  warforged: [],
+  changeling: [],
+  kalashtar: [],
+  shifter: [],
+  orc: [],
+  gith: ['githyanki', 'githzerai'],
+};
+
+app.get('/api/meta/races', (req, res) => {
+  res.json({ races: RACES });
+});
+
 function toSnakeCase(base) {
   return base
     .replace(/([a-z\d])([A-Z])/g, '$1_$2')
@@ -76,8 +113,24 @@ app.get('/api/characters', async (req, res) => {
   }
 });
 
+// Delete character: removes markdown and matching image if exists
+app.post('/api/characters/delete', async (req, res) => {
+  const { base } = req.body || {};
+  if (!base) return res.status(400).json({ error: 'base is required' });
+  try {
+    const mdPath = path.join(contentDir, base + '.md');
+    const imgPath = path.join(imagesDir, base + '.webp');
+    if (await fileExists(mdPath)) await fs.unlink(mdPath);
+    if (await fileExists(imgPath)) await fs.unlink(imgPath);
+    res.json({ ok: true });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
 app.post('/api/characters/update', async (req, res) => {
-  const { originalBase, name, race, subrace, newBase } = req.body || {};
+  const { originalBase, name, race, subrace } = req.body || {};
   if (!originalBase) return res.status(400).json({ error: 'originalBase is required' });
   try {
     const mdPath = path.join(contentDir, originalBase + '.md');
@@ -88,7 +141,11 @@ app.post('/api/characters/update', async (req, res) => {
     const data = parsed.data || {};
     const oldImageBase = data.imageFileBase || originalBase;
 
-    let targetBase = newBase && newBase.trim() ? toSnakeCase(newBase.trim()) : originalBase;
+    // Compute target base from naming convention: race_subrace_name
+    const parts = [race || '', subrace || '', name || ''].filter(Boolean);
+    let computed = parts.join('_');
+    if (!computed) computed = originalBase; // fallback
+    let targetBase = toSnakeCase(computed);
     if (targetBase !== originalBase) {
       targetBase = await uniqueBase(targetBase);
     }
@@ -104,9 +161,9 @@ app.post('/api/characters/update', async (req, res) => {
 
     // Update frontmatter
     parsed.data.imageFileBase = targetBase;
-    if (typeof name === 'string') parsed.data.name = name;
-    if (typeof race === 'string') parsed.data.race = race;
-    if (typeof subrace === 'string') parsed.data.subrace = subrace;
+  if (typeof name === 'string') parsed.data.name = name;
+  if (typeof race === 'string') parsed.data.race = race;
+  if (typeof subrace === 'string') parsed.data.subrace = subrace;
 
     const newMd = matter.stringify(parsed.content || '', parsed.data);
 

@@ -87,17 +87,30 @@ Open the dev server URL shown in your terminal. The homepage lists characters wi
 
 ## Admin GUI (local)
 
-To edit character names, race, and subrace and to rename image basenames directly in the repository, run the local admin:
+Run the local admin to curate characters:
 
 ```powershell
 npm run admin
 ```
 
-Then open <http://localhost:5174> in your browser. You can:
+Open <http://localhost:5174>.
 
-- Edit Name, Race, Subrace.
-- Change the image base name (snake_case recommended). On save, both the image file in `public/images/` and the markdown file in `src/content/characters/` are updated. Collisions are handled by appending `-1`, `-2`, etc.
-- Changes are written immediately to files; review with `git status` and commit when ready.
+Features:
+
+- Edit Name, Race, Subrace using dropdowns populated with a canonical (simplified) D&D race/subrace list.
+- Basename auto-computed as: `race_subrace_name` (omits empty parts) in snake_case; uniqueness handled by suffixes (`-1`, `-2`, ...).
+- Image file (`public/images/<base>.webp`) and markdown file (`src/content/characters/<base>.md`) rename together when the computed base changes.
+- Delete a character (markdown + corresponding image) via the Delete button (confirmation required).
+- Inline status feedback per row.
+
+Workflow after edits/deletions:
+
+```powershell
+git status
+git add .
+git commit -m "chore: update characters"
+git push
+```
 
 ## GitHub Pages setup
 
@@ -107,8 +120,8 @@ In `astro.config.mjs`, set `site` to your Pages URL (e.g., `https://<your-userna
 
 ## Conventions
 
-- Image base names use snake_case.
-- Duplicate names receive `-1`, `-2`, etc.
+- Image base names use snake_case and follow `race_subrace_name` when set via Admin.
+- Duplicate bases receive `-1`, `-2`, etc.
 - Dark theme only.
 
 ## Roadmap
