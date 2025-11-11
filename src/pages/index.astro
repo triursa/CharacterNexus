@@ -1,0 +1,168 @@
+---
+import BaseLayout from "../layouts/BaseLayout.astro";
+import { getCollection } from 'astro:content';
+
+const entries = await getCollection('characters');
+const characters = entries.map(e => ({
+  slug: e.slug,
+  ...e.data,
+}));
+
+const allTags = Array.from(new Set(characters.flatMap((c) => c.tags ?? []))).sort();
+const allProjects = Array.from(new Set(characters.flatMap((c) => c.projects ?? []))).sort();
+const base = import.meta.env.BASE_URL;
+---
+<BaseLayout title="Character Nexus">
+  <section class="mb-6">
+    <div class="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+      <div>
+        <h2 class="text-2xl font-semibold">Characters</h2>
+        <p class="text-sm text-gray-400">Search and filter by tags and projects.</p>
+      </div>
+      <div class="flex gap-2 items-center">
+        <input id="search" type="search" placeholder="Search by name, race, tag..." class="w-72 px-3 py-2 rounded-md bg-white/5 border border-white/10 focus:outline-none focus:ring-2 focus:ring-accent" />
+      </div>
+    </div>
+
+    <div class="mt-4 flex flex-wrap gap-2" id="tag-pills">
+      {allTags.map(t => (
+        <button class="pill" data-filter-type="tag" data-value={t}>{t}</button>
+      ))}
+    </div>
+
+    <div class="mt-2 flex flex-wrap gap-2" id="project-pills">
+      {allProjects.map(p => (
+        <button class="pill" data-filter-type="project" data-value={p}>{p}</button>
+      ))}
+    </div>
+  </section>
+
+  <section class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5" id="cards">
+    {characters.map(c => (
+      <article class="card" data-name={c.name || ''} data-race={c.race || ''} data-tags={(c.tags||[]).join(',')} data-projects={(c.projects||[]).join(',')}>
+  <a href={`characters/${c.slug}/`} class="block">
+          <picture>
+            <img src={`${base}images/${c.imageFileBase}.webp`} alt={c.name || c.imageFileBase} class="w-full h-56 object-cover rounded-md border border-white/10" loading="lazy" />
+          </picture>
+        </a>
+        <div class="mt-3">
+          <h3 class="text-lg font-medium">{c.name || c.imageFileBase}</h3>
+          <p class="text-xs text-gray-400">{c.race || 'Unknown race'}</p>
+          <div class="mt-2 flex flex-wrap gap-1">
+            {(c.tags||[]).map(t => <span class="badge">{t}</span>)}
+          </div>
+          <div class="mt-3 flex gap-2">
+            <a class="btn" href={`${base}images/${c.imageFileBase}.webp`} download title="Download WebP">Download WebP</a>
+            <button class="btn" data-download-png={c.imageFileBase}>Download PNG</button>
+          </div>
+        </div>
+      </article>
+    ))}
+  </section>
+
+  <div class="mt-10 space-y-4" id="stats"></div>
+  <script type="application/json" id="data-json">{JSON.stringify(characters)}</script>
+  <script>
+    const BASE = ${JSON.stringify(base)};
+    const $ = (s, r=document) => r.querySelector(s);
+    const $$ = (s, r=document) => Array.from(r.querySelectorAll(s));
+
+    // Style helpers
+    const pillClass = 'px-3 py-1 rounded-full bg-white/5 text-gray-300 border border-white/10 hover:bg-white/10 data-[active=true]:bg-accent data-[active=true]:text-white';
+    const btnClass = 'px-3 py-1.5 rounded-md bg-white/5 border border-white/10 hover:bg-white/10 text-sm';
+    const badgeClass = 'px-2 py-0.5 rounded bg-white/10 text-gray-300 text-xs border border-white/10';
+    const cardClass = 'p-3 rounded-lg bg-white/5 border border-white/10 backdrop-blur';
+
+    $$('#tag-pills button').forEach(el => el.className = 'pill ' + pillClass);
+    $$('#project-pills button').forEach(el => el.className = 'pill ' + pillClass);
+    $$('#cards .card').forEach(el => el.className = 'card ' + cardClass);
+    $$('#cards .btn').forEach(el => el.className = 'btn ' + btnClass);
+    $$('#cards .badge').forEach(el => el.className = 'badge ' + badgeClass);
+
+  const persisted = (() => { try { return JSON.parse(localStorage.getItem('filters_v1')||'{}'); } catch { return {}; } })();
+  const state = { q: persisted.q || '', tags: new Set(persisted.tags||[]), projects: new Set(persisted.projects||[]) };
+
+    function save() {
+      localStorage.setItem('filters_v1', JSON.stringify({ q: state.q, tags: [...state.tags], projects: [...state.projects] }));
+    }
+
+    function applyFilters() {
+      const q = state.q.toLowerCase();
+      $$('#cards article').forEach(card => {
+        const name = card.dataset.name.toLowerCase();
+        const race = card.dataset.race.toLowerCase();
+        const tags = (card.dataset.tags||'').split(',').filter(Boolean);
+        const projects = (card.dataset.projects||'').split(',').filter(Boolean);
+        const matchesQ = !q || name.includes(q) || race.includes(q) || tags.some(t => t.toLowerCase().includes(q));
+        const matchesTags = state.tags.size === 0 || [...state.tags].every(t => tags.includes(t));
+        const matchesProjects = state.projects.size === 0 || [...state.projects].every(p => projects.includes(p));
+        card.style.display = (matchesQ && matchesTags && matchesProjects) ? '' : 'none';
+      });
+      updateStats();
+      save();
+    }
+
+    $('#search')?.addEventListener('input', (e) => { state.q = e.target.value; applyFilters(); });
+
+    function togglePill(btn) {
+      const group = btn.dataset.filterType;
+      const value = btn.dataset.value;
+      const active = btn.getAttribute('data-active') === 'true';
+      btn.setAttribute('data-active', String(!active));
+      if (group === 'tag') {
+        !active ? state.tags.add(value) : state.tags.delete(value);
+      } else if (group === 'project') {
+        !active ? state.projects.add(value) : state.projects.delete(value);
+      }
+      applyFilters();
+    }
+
+    $$('#tag-pills .pill, #project-pills .pill').forEach(btn => {
+      // restore active state from persisted filters
+      const group = btn.dataset.filterType;
+      const value = btn.dataset.value;
+      const shouldActivate = (group === 'tag' && state.tags.has(value)) || (group === 'project' && state.projects.has(value));
+      if (shouldActivate) btn.setAttribute('data-active', 'true');
+      btn.addEventListener('click', () => togglePill(btn));
+      btn.addEventListener('keypress', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); togglePill(btn); } });
+      btn.setAttribute('role', 'button');
+      btn.setAttribute('tabindex', '0');
+      btn.setAttribute('aria-pressed', btn.getAttribute('data-active') === 'true');
+      const observer = new MutationObserver(() => btn.setAttribute('aria-pressed', btn.getAttribute('data-active') === 'true'));
+      observer.observe(btn, { attributes: true, attributeFilter: ['data-active'] });
+    });
+
+    // Download PNG conversion on-the-fly
+    async function downloadPng(base) {
+      const url = `${BASE}images/${base}.webp`;
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      const blob = await fetch(url).then(r => r.blob());
+      const bitmap = await createImageBitmap(blob);
+      const canvas = document.createElement('canvas');
+      canvas.width = bitmap.width; canvas.height = bitmap.height;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(bitmap, 0, 0);
+      canvas.toBlob((pngBlob) => {
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(pngBlob);
+        a.download = `${base}.png`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+      }, 'image/png');
+    }
+
+    $$('#cards [data-download-png]').forEach(btn => btn.addEventListener('click', () => downloadPng(btn.dataset.downloadPng)));
+
+    function updateStats() {
+      const articles = $$('#cards article').filter(a => a.style.display !== 'none');
+      const total = $$('#cards article').length;
+      const visible = articles.length;
+      $('#stats').innerHTML = `<p class="text-xs text-gray-400">Showing ${visible} of ${total} characters. Filters: ${state.tags.size} tag(s), ${state.projects.size} project(s).</p>`;
+    }
+
+    if (state.q) $('#search').value = state.q;
+    applyFilters();
+  </script>
+</BaseLayout>

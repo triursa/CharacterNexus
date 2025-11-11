@@ -1,0 +1,19 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+}
+
+html {
+  background-color: #0b0d12;
+}
+
+body {
+  @apply bg-bg text-gray-100 min-h-screen antialiased;
+}
+
+.container {
+  @apply max-w-7xl mx-auto px-4;
+}

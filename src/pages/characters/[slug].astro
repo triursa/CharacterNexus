@@ -1,0 +1,61 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import { getEntry } from 'astro:content';
+
+const { slug } = Astro.params;
+const entry = await getEntry('characters', slug);
+if (!entry) {
+  throw new Error('Character not found');
+}
+const data = entry.data;
+const base = import.meta.env.BASE_URL;
+---
+<BaseLayout title={data.name || slug}>
+  <article class="max-w-3xl mx-auto">
+    <div class="flex flex-col md:flex-row gap-6">
+      <div class="md:w-1/2">
+        <img src={`${base}images/${data.imageFileBase}.webp`} alt={data.name || data.imageFileBase} class="w-full rounded-lg border border-white/10" loading="lazy" />
+      </div>
+      <div class="md:w-1/2 space-y-4">
+        <h1 class="text-3xl font-bold">{data.name || data.imageFileBase}</h1>
+        {data.race && <p class="text-sm text-gray-400">Race: {data.race}</p>}
+        <div class="flex flex-wrap gap-2">
+          {(data.tags||[]).map(t => <span class="badge px-2 py-1 rounded bg-white/10 border border-white/10 text-xs">{t}</span>)}
+        </div>
+        {data.projects && data.projects.length > 0 && (
+          <div class="text-xs text-gray-400">Projects: {(data.projects||[]).join(', ')}</div>
+        )}
+        <div class="flex gap-2 pt-2">
+          <a class="btn px-3 py-1.5 rounded bg-white/5 border border-white/10 hover:bg-white/10 text-sm" href={`${base}images/${data.imageFileBase}.webp`} download title="Download WebP">Download WebP</a>
+          <button class="btn px-3 py-1.5 rounded bg-white/5 border border-white/10 hover:bg-white/10 text-sm" id="dl-png" data-base={data.imageFileBase} aria-label="Download PNG">Download PNG</button>
+        </div>
+      </div>
+    </div>
+    <hr class="my-8 border-white/10" />
+    <div class="prose prose-invert max-w-none">
+      <slot />
+    </div>
+  </article>
+  <script>
+    const BASE = ${JSON.stringify(base)};
+    async function downloadPng(fileBase) {
+      const url = `${BASE}images/${fileBase}.webp`;
+      const blob = await fetch(url).then(r => r.blob());
+      const bitmap = await createImageBitmap(blob);
+      const canvas = document.createElement('canvas');
+      canvas.width = bitmap.width; canvas.height = bitmap.height;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(bitmap, 0, 0);
+      canvas.toBlob((pngBlob) => {
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(pngBlob);
+        a.download = `${fileBase}.png`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+      }, 'image/png');
+    }
+    const btn = document.getElementById('dl-png');
+    btn?.addEventListener('click', () => downloadPng(btn.dataset.base));
+  </script>
+</BaseLayout>
